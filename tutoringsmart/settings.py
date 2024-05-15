@@ -82,11 +82,14 @@ ASGI_APPLICATION = 'tutoringsmart.asgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'tutoringsmart',
+        'USER': 'tsuser',
+        'PASSWORD': os.environ['PGPASS'],
+        'HOST': 'localhost',  # Set to 'localhost' or your PostgreSQL server's IP address
+        'PORT': '5433',       # Default PostgreSQL port
     }
 }
-
 
 # Password validation
 # https://docs.djangoproject.com/en/5.0/ref/settings/#auth-password-validators
