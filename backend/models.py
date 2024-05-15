@@ -3,6 +3,7 @@ from django.contrib.auth.models import User  # Import the User model
 
 class Topic(models.Model):
     name = models.CharField(max_length=75, verbose_name='The name of the topic.', help_text='Topic')
+    parent = models.ForeignKey('self', null=True, blank=True, on_delete=models.CASCADE, related_name='subtopics')
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='topics')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -14,8 +15,14 @@ class Topic(models.Model):
         verbose_name = 'Topic'
         verbose_name_plural = 'Topics'
         indexes = [
-            models.Index(fields=['created_by'])
+            models.Index(fields=['created_by']),
+            models.Index(fields=['parent']),
         ]
+    
+    def save(self, *args, **kwargs):
+        if self.parent and self.parent.parent:
+            raise ValueError("Subtopics can only be one level deep.")
+        super().save(*args, **kwargs)
 
 
 class Chat(models.Model):

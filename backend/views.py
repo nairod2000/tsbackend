@@ -3,6 +3,32 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from channels.generic.websocket import AsyncWebsocketConsumer
 import json
+from rest_framework import generics
+from .models import Topic
+from .serializers import TopicSerializer
+
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+class TopicListCreateView(generics.ListCreateAPIView):
+    serializer_class = TopicSerializer
+
+    def get_queryset(self):
+        # Here we can add filters based on the logged-in user in the future
+        return Topic.objects.all()
+    
+    def create(self, request, *args, **kwargs):
+        print('got in here')
+        print(request.data)
+        logger.info(request.data)  # Log the request data for debugging
+        return super().create(request, *args, **kwargs)
+
+class TopicRetrieveUpdateDeleteView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = Topic.objects.all()
+    serializer_class = TopicSerializer
+
 
 
 class ChatConsumer(AsyncWebsocketConsumer):
