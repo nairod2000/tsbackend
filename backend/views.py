@@ -3,31 +3,74 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from channels.generic.websocket import AsyncWebsocketConsumer
 import json
-from rest_framework import generics
+
 from .models import Topic
 from .serializers import TopicSerializer
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from django.http import JsonResponse
+from django.contrib.auth.models import User
+from rest_framework import status, generics, permissions
+from rest_framework.response import Response
+from .serializers import UserSerializer
 
 import logging
 
 logger = logging.getLogger(__name__)
 
 
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+def signup_view(request):
+    data = request.data
+    if User.objects.filter(email=data['email']).exists():
+        return Response({'error': 'Email is already in use'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    user = User.objects.create_user(
+        first_name=data['first_name'],
+        last_name=data['last_name'],
+        email=data['email'],
+        username=data['email'],  # Using email as the username
+        password=data['password']
+    )
+    user.save()
+    
+    response = Response(
+        {'success': 'Account created successfully'}, 
+        status=status.HTTP_201_CREATED
+    )
+    return response
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def logout_view(request):
+    response = JsonResponse({'detail': 'Successfully logged out'})
+    response.delete_cookie('access_token')
+    response.delete_cookie('refresh_token')
+    return response
+
+
 class TopicListCreateView(generics.ListCreateAPIView):
     serializer_class = TopicSerializer
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        # Here we can add filters based on the logged-in user in the future
-        return Topic.objects.all()
-    
-    def create(self, request, *args, **kwargs):
-        print('got in here')
-        print(request.data)
-        logger.info(request.data)  # Log the request data for debugging
-        return super().create(request, *args, **kwargs)
+        return Topic.objects.filter(created_by=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
 
 class TopicRetrieveUpdateDeleteView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Topic.objects.all()
     serializer_class = TopicSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Topic.objects.filter(created_by=self.request.user)
+
 
 
 
