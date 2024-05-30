@@ -1,23 +1,58 @@
-from langchain_openai import ChatOpenAI
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import StrOutputParser
-from channels.generic.websocket import AsyncWebsocketConsumer
-import json
-
 from .models import Topic
 from .serializers import TopicSerializer
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
-from django.http import JsonResponse
+from django.http import JsonResponse, StreamingHttpResponse
 from django.contrib.auth.models import User
 from rest_framework import status, generics, permissions
 from rest_framework.response import Response
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
-from rest_framework_simplejwt.serializers import TokenRefreshSerializer
+import json
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_openai import ChatOpenAI
+from langchain_core.output_parsers import StrOutputParser
 
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+@permission_classes([permissions.IsAuthenticated])
+def chat_view(request):
+    data = request.GET.get('data', '')
+    data = json.loads(data)
+    response = StreamingHttpResponse(generate_chat(data['message'], data['history']), content_type='text/event-stream')
+    return response
+
+
+def generate_chat(message, history):
+    chain = _build_chain(history)
+    chunks = list()
+    for chunk in chain.stream(message):
+        chunks.append(chunk)
+        yield f"data: {json.dumps(chunk)}\n\n"
+    # save message here
+    yield "data: {\"end\": true}\n\n"
+
+
+def _build_chain(history):
+    converter = {
+        'User': 'user',
+        'LLM': 'ai'
+    }
+    print('building chain...')
+    print(history)
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", "You are a helpful assistant."),
+        *[(converter[h['sender']], h['message']) for h in history[0]['messages']],
+        ("user", "{input}"),
+    ])
+
+    llm = ChatOpenAI(model="gpt-4o")
+    output_parser = StrOutputParser()
+
+    # Chain
+    chain = prompt | llm.with_config({"run_name": "model"}) | output_parser.with_config({"run_name": "Assistant"})
+    return chain
 
 
 @api_view(['POST'])
@@ -43,6 +78,7 @@ def signup_view(request):
     return response
 
 
+# remove this
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def logout_view(request):
@@ -62,55 +98,10 @@ class TopicListCreateView(generics.ListCreateAPIView):
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
 
+
 class TopicRetrieveUpdateDeleteView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = TopicSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         return Topic.objects.filter(created_by=self.request.user)
-
-
-
-class ChatConsumer(AsyncWebsocketConsumer):
-
-    async def connect(self):
-        await self.accept()
-
-    async def disconnect(self, close_code):
-        pass
-    
-    def _build_chain(self, history):
-        converter = {
-            'User': 'user',
-            'LLM' : 'ai'
-        }
-        prompt = ChatPromptTemplate.from_messages([
-          ("system", "You are a helpful assistant."),
-          *[(converter[h['sender']], h['message']) for h in history],
-          ("user", "{input}"),
-        ])
-
-        llm = ChatOpenAI(model="gpt-4o")
-
-        output_parser = StrOutputParser()
-        # Chain
-        chain = prompt | llm.with_config({"run_name": "model"}) | output_parser.with_config({"run_name": "Assistant"})
-
-        return chain
-
-    async def receive(self, text_data):
-        text_data_json = json.loads(text_data)
-        message = text_data_json["message"]
-        history = text_data_json.get("history", [])
-        print(history)
-        
-        chain = self._build_chain(history[0]['messages'])
-
-        try:
-            # Stream the response
-            async for chunk in chain.astream_events({'input': message}, version="v1", include_names=["Assistant"]):
-                if chunk["event"] in ["on_parser_start", "on_parser_stream"]:
-                    await self.send(text_data=json.dumps(chunk))
-
-        except Exception as e:
-            print(e)
