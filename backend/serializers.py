@@ -1,8 +1,6 @@
 from rest_framework import serializers
-from .models import Topic
+from .models import Topic, UserMaterial
 from django.contrib.auth.models import User
-from django.contrib.auth import authenticate
-from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
     
 
 class TopicSerializer(serializers.ModelSerializer):
@@ -32,4 +30,12 @@ class UserSerializer(serializers.ModelSerializer):
         return user
     
 
-    
+class UserMaterialSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserMaterial
+        fields = ['material', 'ccount', 'icount', 'last_reviewed', 'interval', 'repetition', 'easiness', 'next_review', 'learned']
+
+
+class UpdateReviewSerializer(serializers.Serializer):
+    material_id = serializers.IntegerField()
+    correct = serializers.BooleanField()

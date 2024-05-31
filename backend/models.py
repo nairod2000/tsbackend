@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import User  # Import the User model
+from django.utils import timezone
 
 class Topic(models.Model):
     name = models.CharField(max_length=75, verbose_name='The name of the topic.', help_text='Topic')
@@ -29,6 +30,7 @@ class Chat(models.Model):
     '''A dialogue between user and tutor.'''
     mode = models.CharField(max_length=10, choices=[('eval', 'Evaluation'), ('teach', 'Teaching')], verbose_name='Chat mode (Eval or Teach).', help_text='Chat mode')
     topic = models.ForeignKey(Topic, on_delete=models.CASCADE)
+    material = models.ForeignKey('Material', on_delete=models.CASCADE, null=True, blank=True)
     starred = models.BooleanField(default=False, verbose_name='Starred by user.', help_text='Starred')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -40,7 +42,7 @@ class Chat(models.Model):
         verbose_name = 'Chat'
         verbose_name_plural = 'Chats'
         indexes = [
-            models.Index(fields=['mode', 'topic']),
+            models.Index(fields=['mode', 'topic', 'material']),
         ]
 
 
@@ -49,6 +51,7 @@ class ChatMessage(models.Model):
     chat = models.ForeignKey(Chat, on_delete=models.CASCADE)
     role = models.CharField(max_length=10, choices=[('ai', 'Tutor'), ('user', 'User')], verbose_name='The role that the chat belongs to.', help_text='Role')
     content = models.TextField(verbose_name='The content of the message', help_text='Content')
+    sequence = models.PositiveIntegerField(verbose_name='Sequence of the message')
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -59,6 +62,7 @@ class ChatMessage(models.Model):
         verbose_name_plural = 'Chat Messages'
         indexes = [
             models.Index(fields=['chat', 'role']),
+            models.Index(fields=['chat', 'sequence']),
         ]
 
 
@@ -84,6 +88,12 @@ class UserMaterial(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     ccount = models.PositiveSmallIntegerField(verbose_name='Correct count: the number of times material recalled correctly.', help_text='Correct count')
     icount = models.PositiveSmallIntegerField(verbose_name='Incorrect count: the number of times material recalled incorrectly.', help_text='Incorrect count')
+    last_reviewed = models.DateTimeField(null=True, blank=True)
+    interval = models.PositiveIntegerField(default=1)
+    repetition = models.PositiveIntegerField(default=0)
+    easiness = models.FloatField(default=2.5)
+    next_review = models.DateTimeField(default=timezone.now)
+    learned = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -98,6 +108,7 @@ class UserMaterial(models.Model):
         ]
 
 
+# I dont think that this is something that I really want to have
 class FixedMaterial(models.Model):
     name = models.CharField(max_length=255, verbose_name='Name of the fixed material')
     type = models.CharField(max_length=255, verbose_name='Type of the fixed material')
@@ -116,8 +127,10 @@ class FixedMaterial(models.Model):
         ]
 
 
+# 
 class FixedChatMessage(models.Model):
     material = models.ForeignKey(FixedMaterial, on_delete=models.CASCADE)
+    chat = models.ForeignKey(Chat, on_delete=models.CASCADE, null=True, blank=True)
     sequence = models.PositiveIntegerField(verbose_name='Sequence of the chat')
     content = models.TextField(verbose_name='Content of the chat')
     input_type = models.CharField(max_length=255, verbose_name='Type of input expected', choices=[('button', 'Button'), ('text', 'Text')])

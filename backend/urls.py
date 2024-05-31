@@ -7,6 +7,8 @@ from . import views
   
 urlpatterns = [  
     #path('ws/chat/', ChatConsumer.as_asgi()),
+    path('api/materials/sm2/', views.get_materials_sm2, name='get-materials-sm2'),
+    path('api/materials/review', views.update_review_count, name='update-review-count'),
     path('api/chat/', views.chat_view, name='chat-view'),
     path('api/topics/', views.TopicListCreateView.as_view(), name='topic-list-create'),
     path('api/topics/<int:pk>/', views.TopicRetrieveUpdateDeleteView.as_view(), name='topic-retrieve-update-delete'),

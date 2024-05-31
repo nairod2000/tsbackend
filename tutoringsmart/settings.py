@@ -124,7 +124,7 @@ DATABASES = {
         'USER': 'tsuser',
         'PASSWORD': os.environ['PGPASS'],
         'HOST': 'localhost',  # Set to 'localhost' or your PostgreSQL server's IP address
-        'PORT': '5432',       # Default PostgreSQL port
+        'PORT': '5433',       # Default PostgreSQL port
     }
 }
 

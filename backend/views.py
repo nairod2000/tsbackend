@@ -1,5 +1,5 @@
-from .models import Topic
-from .serializers import TopicSerializer
+from .models import Topic, Material, UserMaterial
+from .serializers import TopicSerializer, UserMaterialSerializer, UpdateReviewSerializer
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from django.http import JsonResponse, StreamingHttpResponse
@@ -10,10 +10,62 @@ import json
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 from langchain_core.output_parsers import StrOutputParser
+from .models import Material
+from django.views.decorators.http import require_GET
+from django.utils import timezone
+from datetime import timedelta
+from django.shortcuts import get_object_or_404
 
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+@api_view(['GET'])
+def get_materials_sm2(request):
+    user = request.user
+    now = timezone.now()
+    user_materials = UserMaterial.objects.filter(user=user).order_by('next_review')
+    due_materials = [um for um in user_materials if um.next_review <= now]
+    not_due_materials = [um for um in user_materials if um.next_review > now]
+    sorted_user_materials = due_materials + not_due_materials
+    serializer = UserMaterialSerializer(sorted_user_materials, many=True)
+    return Response(serializer.data)
+
+@api_view(['POST'])
+def update_review_count(request):
+    user = request.user
+    serializer = UpdateReviewSerializer(data=request.data)
+    if serializer.is_valid():
+        material_id = serializer.validated_data['material_id']
+        correct = serializer.validated_data['correct']
+        user_material = get_object_or_404(UserMaterial, user=user, material_id=material_id)
+        
+        if correct:
+            user_material.ccount += 1
+            user_material.repetition += 1
+            if user_material.repetition == 1:
+                user_material.interval = 1  # 1 day
+                user_material.next_review = timezone.now() + timedelta(days=1)
+            elif user_material.repetition == 2:
+                user_material.interval = 3  # 3 days
+                user_material.next_review = timezone.now() + timedelta(days=3)
+            else:
+                user_material.interval *= user_material.easiness
+                user_material.next_review = timezone.now() + timedelta(days=user_material.interval)
+                user_material.easiness = max(1.3, user_material.easiness + 0.1)
+        else:
+            user_material.icount += 1
+            user_material.repetition = 0
+            user_material.interval = 0
+            user_material.next_review = timezone.now() + timedelta(minutes=15)
+            user_material.easiness = max(1.3, user_material.easiness - 0.2)
+        
+        user_material.last_reviewed = timezone.now()
+        user_material.save()
+        
+        return Response({'status': 'success'}, status=status.HTTP_200_OK)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 @permission_classes([permissions.IsAuthenticated])
