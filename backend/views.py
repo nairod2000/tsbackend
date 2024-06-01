@@ -15,6 +15,7 @@ from django.views.decorators.http import require_GET
 from django.utils import timezone
 from datetime import timedelta
 from django.shortcuts import get_object_or_404
+import urllib
 
 import logging
 
@@ -24,11 +25,21 @@ logger = logging.getLogger(__name__)
 @api_view(['GET'])
 def get_materials_sm2(request):
     user = request.user
+    topic_name = request.query_params.get('topic', '')
+    
+    if topic_name:
+        topic_name = urllib.parse.unquote(topic_name)
+
     now = timezone.now()
-    user_materials = UserMaterial.objects.filter(user=user).order_by('next_review')
+
+    # Get materials filtered by user and topic
+    user_materials = UserMaterial.objects.filter(user=user, material__topic__name=topic_name).order_by('next_review')
+    print(user_materials)
+    
     due_materials = [um for um in user_materials if um.next_review <= now]
     not_due_materials = [um for um in user_materials if um.next_review > now]
     sorted_user_materials = due_materials + not_due_materials
+    
     serializer = UserMaterialSerializer(sorted_user_materials, many=True)
     return Response(serializer.data)
 
