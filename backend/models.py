@@ -30,7 +30,7 @@ class Chat(models.Model):
     '''A dialogue between user and tutor.'''
     mode = models.CharField(max_length=10, choices=[('eval', 'Evaluation'), ('teach', 'Teaching')], verbose_name='Chat mode (Eval or Teach).', help_text='Chat mode')
     topic = models.ForeignKey(Topic, on_delete=models.CASCADE)
-    material = models.ForeignKey('Material', on_delete=models.CASCADE, null=True, blank=True)
+    user_material = models.ForeignKey('UserMaterial', on_delete=models.CASCADE, null=True, blank=True)
     starred = models.BooleanField(default=False, verbose_name='Starred by user.', help_text='Starred')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -42,7 +42,7 @@ class Chat(models.Model):
         verbose_name = 'Chat'
         verbose_name_plural = 'Chats'
         indexes = [
-            models.Index(fields=['mode', 'topic', 'material']),
+            models.Index(fields=['mode', 'topic', 'user_material']),
         ]
 
 

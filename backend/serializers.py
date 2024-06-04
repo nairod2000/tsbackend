@@ -33,7 +33,7 @@ class UserSerializer(serializers.ModelSerializer):
 class UserMaterialSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserMaterial
-        fields = ['material', 'ccount', 'icount', 'last_reviewed', 'interval', 'repetition', 'easiness', 'next_review', 'learned']
+        fields = ['material', 'ccount', 'icount', 'last_reviewed', 'interval', 'repetition', 'easiness', 'next_review', 'learned', 'id']
 
 
 class UpdateReviewSerializer(serializers.Serializer):

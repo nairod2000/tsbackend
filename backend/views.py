@@ -109,15 +109,15 @@ def chat_start_view(request):
 
     material = Material.objects.get(pk=user_material['material'])
 
+    user_material = UserMaterial.objects.get(pk=user_material['id'])
+
     # I dont think this is normalized
-    # also, it will probably be better to have these saved to user_material
-    # this is going to require a more through examination of how and where 
-    # user materials are created and used.
     chat = Chat.objects.create(
-        mode='eval' if user_material['learned'] else 'teach',
+        mode='eval' if user_material.learned else 'teach',
         topic=material.topic,
-        material=material
-    ).save()
+        user_material=user_material
+    )
+    chat.save()
 
     if chat.mode == 'eval':
         system_prompt_content = Prompt.objects.get(name='eval_system').content
@@ -139,7 +139,7 @@ def chat_start_view(request):
     init_message = ChatMessage.objects.create(
         chat=chat,
         role='user',
-        content=init_message_content.format(material=material),
+        content=init_message_content.format(material=material.content),
         sequence=1
     )
     init_message.save()
@@ -155,7 +155,7 @@ def generate_chat_message(chat):
     chain = _build_chain(chat)
     chunks = list()
 
-    for chunk in chain.stream():
+    for chunk in chain.stream({}):
         chunks.append(chunk)
         yield f"data: {json.dumps(chunk)}\n\n"
 
@@ -163,7 +163,7 @@ def generate_chat_message(chat):
         chat=chat,
         role='ai',
         content=''.join(chunks),
-        sequence=len(ChatMessage.objects.get(chat=chat)) - 1 # strong feeling this will not work
+        sequence=len(ChatMessage.objects.filter(chat=chat)) # strong feeling this will not work
     )
     chat_message.save()
 
