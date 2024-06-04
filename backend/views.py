@@ -1,4 +1,4 @@
-from .models import Topic, Material, UserMaterial
+from .models import Topic, UserMaterial, Prompt, Material
 from .serializers import TopicSerializer, UserMaterialSerializer, UpdateReviewSerializer
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -10,7 +10,6 @@ import json
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 from langchain_core.output_parsers import StrOutputParser
-from .models import Material
 from django.views.decorators.http import require_GET
 from django.utils import timezone
 from datetime import timedelta
@@ -44,7 +43,8 @@ def get_materials_sm2(request):
     return Response(serializer.data)
 
 @api_view(['POST'])
-def update_review_count(request):
+def eval_material(request):
+    # turn this into the eval endpoint
     user = request.user
     serializer = UpdateReviewSerializer(data=request.data)
     if serializer.is_valid():
@@ -81,10 +81,50 @@ def update_review_count(request):
 
 @permission_classes([permissions.IsAuthenticated])
 def chat_view(request):
+
     data = request.GET.get('data', '')
     data = json.loads(data)
+
     response = StreamingHttpResponse(generate_chat(data['message'], data['history']), content_type='text/event-stream')
+
     return response
+
+
+@permission_classes([permissions.IsAuthenticated])
+def chat_start_view(request):
+    user_material = request.GET.get('material', '')
+    user_material = json.loads(user_material)['material']
+
+    chat_type = 'eval' if user_material['learned'] else 'learn'
+
+    material = Material.objects.get(pk=user_material['material'])
+
+    if chat_type == 'eval':
+        system_prompt = Prompt.objects.get(name='eval_system')
+        prompt = Prompt.objects.get(name='eval')
+    elif chat_type == 'learn':
+        system_prompt = Prompt.objects.get(name='learn_system')
+        prompt = Prompt.objects.get(name='learn')
+    
+    chain_prompt = ChatPromptTemplate.from_messages([
+        ('system', system_prompt.content),
+        ('user', prompt.content),
+    ])
+
+    llm = ChatOpenAI(model="gpt-4o")
+    output_parser = StrOutputParser()
+
+    # Chain
+    chain = chain_prompt | llm.with_config({"run_name": "model"}) | output_parser.with_config({"run_name": "Assistant"})
+    
+    return StreamingHttpResponse(gen_chat(chain, material), content_type="text/event-stream")
+
+
+def gen_chat(chain, material):
+    for chunk in chain.stream(material.content):
+        print(chunk)
+        yield f'data: {json.dumps(chunk)}\n\n'
+    yield "data: {\"end\": true}\n\n"
 
 
 def generate_chat(message, history):

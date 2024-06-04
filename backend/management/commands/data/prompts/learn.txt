@@ -1,0 +1,1 @@
+The following material needs to be learned: {material}. Please lay out and teach about this material as atomically as possible.

@@ -167,18 +167,18 @@ class FixedInput(models.Model):
 
 
 class Prompt(models.Model):
-    material = models.ForeignKey(Material, on_delete=models.CASCADE)
+    name = models.CharField(max_length=50, verbose_name='The name of the prompt.')
     content = models.TextField(verbose_name='Content of the prompt')
     editable = models.BooleanField(default=False, verbose_name='Is the prompt editable by the user')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"Prompt for {self.material.topic.name} - Editable: {self.editable}"
+        return f"Prompt: {self.name}"
 
     class Meta:
         verbose_name = 'Prompt'
         verbose_name_plural = 'Prompts'
         indexes = [
-            models.Index(fields=['material', 'editable']),
+            models.Index(fields=['name', 'editable']),
         ]

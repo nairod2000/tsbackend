@@ -4,12 +4,12 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from . import views 
 #from .consumers import ChatConsumer
   
-  
-urlpatterns = [  
-    #path('ws/chat/', ChatConsumer.as_asgi()),
+
+urlpatterns = [
     path('api/materials/sm2/', views.get_materials_sm2, name='get-materials-sm2'),
-    path('api/materials/review', views.update_review_count, name='update-review-count'),
+    path('api/materials/eval/', views.eval_material, name='eval-material'),
     path('api/chat/', views.chat_view, name='chat-view'),
+    path('api/chat/start/', views.chat_start_view, name='chat_start_view'),
     path('api/topics/', views.TopicListCreateView.as_view(), name='topic-list-create'),
     path('api/topics/<int:pk>/', views.TopicRetrieveUpdateDeleteView.as_view(), name='topic-retrieve-update-delete'),
     path('api/signup/', signup_view, name='signup'),
