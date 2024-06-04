@@ -49,7 +49,7 @@ class Chat(models.Model):
 class ChatMessage(models.Model):
     '''Message in a dialogue between user and tutor.'''
     chat = models.ForeignKey(Chat, on_delete=models.CASCADE)
-    role = models.CharField(max_length=10, choices=[('ai', 'Tutor'), ('user', 'User')], verbose_name='The role that the chat belongs to.', help_text='Role')
+    role = models.CharField(max_length=10, choices=[('ai', 'Tutor'), ('user', 'User'), ('system', 'system')], verbose_name='The role that the chat belongs to.', help_text='Role')
     content = models.TextField(verbose_name='The content of the message', help_text='Content')
     sequence = models.PositiveIntegerField(verbose_name='Sequence of the message')
     created_at = models.DateTimeField(auto_now_add=True)

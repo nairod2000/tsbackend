@@ -1,4 +1,4 @@
-from .models import Topic, UserMaterial, Prompt, Material
+from .models import Topic, UserMaterial, Prompt, Material, Chat, ChatMessage
 from .serializers import TopicSerializer, UserMaterialSerializer, UpdateReviewSerializer
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -81,79 +81,106 @@ def eval_material(request):
 
 @permission_classes([permissions.IsAuthenticated])
 def chat_view(request):
+    '''The endpoint for continuing a chat.'''
+    # need to get the id of the chat from the frontend
+    # that chat needs to belong to the user
 
+    # 1) get the chat
+    # 2) create save the ChatMessage
     data = request.GET.get('data', '')
     data = json.loads(data)
 
-    response = StreamingHttpResponse(generate_chat(data['message'], data['history']), content_type='text/event-stream')
+    chat = Chat.objects.get()
+    chat_message = ChatMessage.objects.create()
 
+    response = StreamingHttpResponse(
+        generate_chat_message(chat), 
+        content_type='text/event-stream'
+    )
     return response
 
 
 @permission_classes([permissions.IsAuthenticated])
 def chat_start_view(request):
+    '''Begins a new chat.'''
+    # ToDo: params need to be required (material)
     user_material = request.GET.get('material', '')
     user_material = json.loads(user_material)['material']
 
-    chat_type = 'eval' if user_material['learned'] else 'learn'
-
     material = Material.objects.get(pk=user_material['material'])
 
-    if chat_type == 'eval':
-        system_prompt = Prompt.objects.get(name='eval_system')
-        prompt = Prompt.objects.get(name='eval')
-    elif chat_type == 'learn':
-        system_prompt = Prompt.objects.get(name='learn_system')
-        prompt = Prompt.objects.get(name='learn')
-    
-    chain_prompt = ChatPromptTemplate.from_messages([
-        ('system', system_prompt.content),
-        ('user', prompt.content),
-    ])
+    # I dont think this is normalized
+    # also, it will probably be better to have these saved to user_material
+    # this is going to require a more through examination of how and where 
+    # user materials are created and used.
+    chat = Chat.objects.create(
+        mode='eval' if user_material['learned'] else 'teach',
+        topic=material.topic,
+        material=material
+    ).save()
 
-    llm = ChatOpenAI(model="gpt-4o")
-    output_parser = StrOutputParser()
+    if chat.mode == 'eval':
+        system_prompt_content = Prompt.objects.get(name='eval_system').content
+        init_message_content = Prompt.objects.get(name='eval').content
+    elif chat.mode == 'teach':
+        system_prompt_content = Prompt.objects.get(name='learn_system').content
+        init_message_content = Prompt.objects.get(name='learn').content
 
-    # Chain
-    chain = chain_prompt | llm.with_config({"run_name": "model"}) | output_parser.with_config({"run_name": "Assistant"})
-    
-    return StreamingHttpResponse(gen_chat(chain, material), content_type="text/event-stream")
+    # makes the system message loadable in build chain
+    system_message = ChatMessage.objects.create(
+        chat=chat,
+        role='system',
+        content=system_prompt_content,
+        sequence=0
+    )
+    system_message.save()
+
+    # makes the init message loadable in build chain
+    init_message = ChatMessage.objects.create(
+        chat=chat,
+        role='user',
+        content=init_message_content.format(material=material),
+        sequence=1
+    )
+    init_message.save()
+
+    response = StreamingHttpResponse(
+       generate_chat_message(chat), 
+       content_type="text/event-stream"
+    )
+    return response
 
 
-def gen_chat(chain, material):
-    for chunk in chain.stream(material.content):
-        print(chunk)
-        yield f'data: {json.dumps(chunk)}\n\n'
-    yield "data: {\"end\": true}\n\n"
-
-
-def generate_chat(message, history):
-    chain = _build_chain(history)
+def generate_chat_message(chat):
+    chain = _build_chain(chat)
     chunks = list()
-    for chunk in chain.stream(message):
+
+    for chunk in chain.stream():
         chunks.append(chunk)
         yield f"data: {json.dumps(chunk)}\n\n"
-    # save message here
+
+    chat_message = ChatMessage.objects.create(
+        chat=chat,
+        role='ai',
+        content=''.join(chunks),
+        sequence=len(ChatMessage.objects.get(chat=chat)) - 1 # strong feeling this will not work
+    )
+    chat_message.save()
+
     yield "data: {\"end\": true}\n\n"
 
 
-def _build_chain(history):
-    converter = {
-        'User': 'user',
-        'LLM': 'ai'
-    }
-    print('building chain...')
-    print(history)
+def _build_chain(chat):
+    
+    message_qs = ChatMessage.objects.filter(chat=chat).order_by('sequence')
+
     prompt = ChatPromptTemplate.from_messages([
-        ("system", "You are a helpful assistant."),
-        *[(converter[h['sender']], h['message']) for h in history[0]['messages']],
-        ("user", "{input}"),
+        *[(m.role, m.content) for m in message_qs],
     ])
 
     llm = ChatOpenAI(model="gpt-4o")
     output_parser = StrOutputParser()
 
-    # Chain
     chain = prompt | llm.with_config({"run_name": "model"}) | output_parser.with_config({"run_name": "Assistant"})
     return chain
 
