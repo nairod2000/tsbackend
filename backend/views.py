@@ -1,5 +1,5 @@
 from .models import Topic, UserMaterial, Prompt, Material, Chat, ChatMessage
-from .serializers import TopicSerializer, UserMaterialSerializer, UpdateReviewSerializer
+from .serializers import TopicSerializer, UserMaterialSerializer, UpdateReviewSerializer, ChatCreateSerializer, ChatSerializer
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from django.http import JsonResponse, StreamingHttpResponse
@@ -90,8 +90,18 @@ def chat_view(request):
     data = request.GET.get('data', '')
     data = json.loads(data)
 
-    chat = Chat.objects.get()
-    chat_message = ChatMessage.objects.create()
+    chatId = data['chatId']
+    message = data['message']
+
+    chat = Chat.objects.get(pk=int(chatId))
+
+    chat_message = ChatMessage.objects.create(
+        chat=chat,
+        role='user',
+        content=message,
+        sequence=ChatMessage.objects.filter(chat=chat).count()
+    )
+    chat_message.save()
 
     response = StreamingHttpResponse(
         generate_chat_message(chat), 
@@ -104,20 +114,17 @@ def chat_view(request):
 def chat_start_view(request):
     '''Begins a new chat.'''
     # ToDo: params need to be required (material)
-    user_material = request.GET.get('material', '')
-    user_material = json.loads(user_material)['material']
+    data = request.GET.get('data', '')
+    data = json.loads(data)
+    user_material = data['material']
 
     material = Material.objects.get(pk=user_material['material'])
 
     user_material = UserMaterial.objects.get(pk=user_material['id'])
 
-    # I dont think this is normalized
-    chat = Chat.objects.create(
-        mode='eval' if user_material.learned else 'teach',
-        topic=material.topic,
-        user_material=user_material
-    )
-    chat.save()
+    chat_id = data['chatId']
+
+    chat = Chat.objects.get(pk=int(chat_id))
 
     if chat.mode == 'eval':
         system_prompt_content = Prompt.objects.get(name='eval_system').content
@@ -163,7 +170,7 @@ def generate_chat_message(chat):
         chat=chat,
         role='ai',
         content=''.join(chunks),
-        sequence=len(ChatMessage.objects.filter(chat=chat)) # strong feeling this will not work
+        sequence=ChatMessage.objects.filter(chat=chat).count() # strong feeling this will not work
     )
     chat_message.save()
 
@@ -235,3 +242,34 @@ class TopicRetrieveUpdateDeleteView(generics.RetrieveUpdateDestroyAPIView):
 
     def get_queryset(self):
         return Topic.objects.filter(created_by=self.request.user)
+
+class ChatListView(generics.ListAPIView):
+    serializer_class = ChatSerializer
+
+    def get_queryset(self):
+        topic_name = self.request.query_params.get('topic')
+
+        if topic_name is None:
+            return Chat.objects.none()
+        
+        topic_name = urllib.parse.unquote(topic_name)
+        try:
+            topic = Topic.objects.get(name=topic_name)
+        except Topic.DoesNotExist:
+            return Chat.objects.none()
+        
+        return Chat.objects.filter(topic=topic)
+
+class ChatCreateView(generics.CreateAPIView):
+    serializer_class = ChatCreateSerializer
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        from django.core.exceptions import ValidationError
+        if not serializer.is_valid():
+            print(serializer.errors)  # Print serializer errors to debug
+            raise ValidationError(serializer.errors)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)

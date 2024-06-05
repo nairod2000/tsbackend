@@ -1,6 +1,7 @@
 from rest_framework import serializers
-from .models import Topic, UserMaterial
+from .models import Topic, UserMaterial, ChatMessage, Chat
 from django.contrib.auth.models import User
+import urllib
     
 
 class TopicSerializer(serializers.ModelSerializer):
@@ -39,3 +40,36 @@ class UserMaterialSerializer(serializers.ModelSerializer):
 class UpdateReviewSerializer(serializers.Serializer):
     material_id = serializers.IntegerField()
     correct = serializers.BooleanField()
+
+
+class ChatMessageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ChatMessage
+        fields = ['id', 'content']
+
+
+class ChatSerializer(serializers.ModelSerializer):
+    messages = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Chat
+        fields = ['id', 'messages']
+
+    def get_messages(self, obj):
+        messages = ChatMessage.objects.filter(chat=obj, sequence__gte=2)
+        return ChatMessageSerializer(messages, many=True).data
+    
+
+class ChatCreateSerializer(serializers.ModelSerializer):
+    topic = serializers.CharField()
+
+    class Meta:
+        model = Chat
+        fields = ['id', 'mode', 'topic', 'user_material', 'starred']
+
+    def create(self, validated_data):
+        topic_name = validated_data.pop('topic')
+        topic_name = urllib.parse.unquote(topic_name)
+        topic = Topic.objects.get(name=topic_name)
+        chat = Chat.objects.create(topic=topic, **validated_data)
+        return chat

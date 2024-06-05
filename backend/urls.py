@@ -1,8 +1,7 @@
 from django.urls import path
-from .views import logout_view, signup_view
+from .views import logout_view, signup_view, ChatListView, ChatCreateView
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView, TokenVerifyView
 from . import views 
-#from .consumers import ChatConsumer
   
 
 urlpatterns = [
@@ -10,6 +9,8 @@ urlpatterns = [
     path('api/materials/eval/', views.eval_material, name='eval-material'),
     path('api/chat/', views.chat_view, name='chat-view'),
     path('api/chat/start/', views.chat_start_view, name='chat_start_view'),
+    path('api/chats/', ChatListView.as_view(), name='chat-list'),
+    path('api/chats/create/', ChatCreateView.as_view(), name='chat-create'),
     path('api/topics/', views.TopicListCreateView.as_view(), name='topic-list-create'),
     path('api/topics/<int:pk>/', views.TopicRetrieveUpdateDeleteView.as_view(), name='topic-retrieve-update-delete'),
     path('api/signup/', signup_view, name='signup'),
